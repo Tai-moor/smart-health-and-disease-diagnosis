@@ -1,0 +1,10 @@
+Dr. Ahmed Khan|Cardiologist|Rawalpindi|0323-1234567|Experience: 15 years
+Dr. Saira Malik|Gynecologist|Lahore|0300-9876543|Experience: 12 years
+Dr. Hassan Ali|Orthopedic Surgeon|Karachi|0321-5555555|Experience: 10 years
+Dr. Fatima Hussain|Dermatologist|Islamabad|0345-7777888|Experience: 8 years
+Dr. Muhammad Rizwan|Neurologist|Multan|0333-2222333|Experience: 14 years
+Dr. Amina Iqbal|Pediatrician|Faisalabad|0300-4444555|Experience: 11 years
+Dr. Usman Sheikh|General Physician|Peshawar|0331-6666777|Experience: 9 years
+Dr. Hira Khan|Pulmonologist|Quetta|0345-8888999|Experience: 13 years
+Dr. Ali Raza|Gastroenterologist|Gujranwala|0321-1111222|Experience: 10 years
+Dr. Nida Aslam|ENT Specialist|Sialkot|0333-3333444|Experience: 7 years

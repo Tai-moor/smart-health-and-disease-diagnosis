@@ -3,7 +3,7 @@ import { auth, db } from "../../services/firebase";
 import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 import { doc, writeBatch } from "firebase/firestore";
 import { useNavigate, Link } from "react-router-dom";
-import { FaUserMd, FaHospital, FaClock, FaMoneyBillWave, FaTrash, FaPlusCircle } from "react-icons/fa";
+import { FaUserMd, FaHospital, FaClock, FaMoneyBillWave, FaTrash, FaPlusCircle, FaMapMarkerAlt } from "react-icons/fa";
 
 // 🎨 Modern Styles (Glassmorphism & Gradient)
 const styles = {
@@ -12,12 +12,12 @@ const styles = {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    background: "linear-gradient(135deg, #e0f7fa 0%, #e1bee7 100%)", // Beautiful Gradient
+    background: "linear-gradient(135deg, #e0f7fa 0%, #e1bee7 100%)",
     fontFamily: "'Inter', sans-serif",
     padding: "40px 20px",
   },
   card: {
-    backgroundColor: "rgba(255, 255, 255, 0.95)", // Glass effect
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
     backdropFilter: "blur(10px)",
     padding: "40px",
     borderRadius: "20px",
@@ -85,19 +85,21 @@ const allSpecialties = [
 
 function Signup() {
   const navigate = useNavigate();
-  const [formData, setFormData] = useState({ name: "", email: "", phone: "", password: "", gender: "male", experience: "", about: "", services: "" });
+  // 🟢 ADDED: 'city' to general formData
+  const [formData, setFormData] = useState({ name: "", email: "", phone: "", city: "", password: "", gender: "male", experience: "", about: "", services: "" });
   const [isDoctor, setIsDoctor] = useState(false);
   const [specialties, setSpecialties] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 🟢 NEW: Multiple Locations State
+  // 🟢 UPDATED: 'city' added to location object structure
   const [locations, setLocations] = useState([
-    { hospital: "", days: "Mon - Fri", time: "09:00 AM - 05:00 PM", fee: "" }
+    { hospital: "", city: "", days: "Mon - Fri", time: "09:00 AM - 05:00 PM", fee: "" }
   ]);
 
   const addLocation = () => {
-    setLocations([...locations, { hospital: "", days: "Mon - Fri", time: "09:00 AM - 05:00 PM", fee: "" }]);
+    // 🟢 Ensure new locations also have a city field
+    setLocations([...locations, { hospital: "", city: "", days: "Mon - Fri", time: "09:00 AM - 05:00 PM", fee: "" }]);
   };
 
   const removeLocation = (index) => {
@@ -128,8 +130,14 @@ function Signup() {
       const userRef = doc(db, "users", user.uid);
       
       const baseData = {
-        uid: user.uid, name: formData.name, email: formData.email, phone: formData.phone,
-        gender: formData.gender, role: isDoctor ? "doctor" : "patient", createdAt: new Date().toISOString()
+        uid: user.uid, 
+        name: formData.name, 
+        email: formData.email, 
+        phone: formData.phone,
+        city: formData.city, // 🟢 Saved to User Profile
+        gender: formData.gender, 
+        role: isDoctor ? "doctor" : "patient", 
+        createdAt: new Date().toISOString()
       };
 
       batch.set(userRef, baseData);
@@ -142,9 +150,10 @@ function Signup() {
           about: formData.about,
           services: formData.services.split(",").map(s => s.trim()),
           specialties: specialties,
-          practiceLocations: locations, // 🟢 Saves Array of Locations
-          // Legacy fields for backward compatibility
+          practiceLocations: locations, // 🟢 Saves Array containing Cities
+          // Legacy fields mapping to first location
           hospital: locations[0]?.hospital || "", 
+          city: locations[0]?.city || "", // 🟢 Main city fallback
           fee: locations[0]?.fee || 0,
           verified: false
         });
@@ -180,13 +189,22 @@ function Signup() {
               <label style={styles.label}>Phone</label>
               <input style={styles.input} onChange={(e) => setFormData({...formData, phone: e.target.value})} required placeholder="+92 300..." />
             </div>
-            <div style={{width: "120px"}}>
-              <label style={styles.label}>Gender</label>
-              <select style={styles.select} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
-                <option value="male">Male</option>
-                <option value="female">Female</option>
-              </select>
+            
+            {/* 🟢 NEW: General City Input */}
+            <div style={{flex: 1}}>
+              <label style={styles.label}>City</label>
+              <input style={styles.input} onChange={(e) => setFormData({...formData, city: e.target.value})} required placeholder="e.g. Lahore" />
             </div>
+          </div>
+
+          <div style={{ display: 'flex', gap: '15px', marginTop: '20px' }}>
+             <div style={{flex: 1}}>
+                <label style={styles.label}>Gender</label>
+                <select style={styles.select} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+             </div>
           </div>
 
           <div style={styles.inputGroup}>
@@ -240,24 +258,31 @@ function Signup() {
                 </div>
               </div>
 
-              {/* 🟢 NEW: DYNAMIC LOCATIONS */}
+              {/* 🟢 DYNAMIC LOCATIONS WITH CITY */}
               <label style={styles.label}>Practice Locations</label>
               {locations.map((loc, index) => (
                 <div key={index} style={styles.locationCard}>
                   {index > 0 && <button type="button" style={styles.removeBtn} onClick={() => removeLocation(index)}><FaTrash/></button>}
                   
+                  {/* Row 1: Hospital & City */}
                   <div style={{display: "flex", gap: "10px", marginBottom: "10px"}}>
                     <div style={{flex: 1}}>
                       <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px", fontSize:"12px", color:"#666"}}><FaHospital/> Hospital Name</div>
                       <input style={styles.input} placeholder="e.g. City Hospital" value={loc.hospital} onChange={(e) => updateLocation(index, 'hospital', e.target.value)} required />
                     </div>
-                    <div style={{width: "120px"}}>
-                      <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px", fontSize:"12px", color:"#666"}}><FaMoneyBillWave/> Fee</div>
-                      <input type="number" style={styles.input} placeholder="2000" value={loc.fee} onChange={(e) => updateLocation(index, 'fee', e.target.value)} required />
+                    {/* 🟢 NEW: Practice City Input */}
+                    <div style={{flex: 1}}>
+                      <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px", fontSize:"12px", color:"#666"}}><FaMapMarkerAlt/> City</div>
+                      <input style={styles.input} placeholder="e.g. Islamabad" value={loc.city} onChange={(e) => updateLocation(index, 'city', e.target.value)} required />
                     </div>
                   </div>
 
+                  {/* Row 2: Fee & Time */}
                   <div style={{display: "flex", gap: "10px"}}>
+                     <div style={{width: "120px"}}>
+                      <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px", fontSize:"12px", color:"#666"}}><FaMoneyBillWave/> Fee</div>
+                      <input type="number" style={styles.input} placeholder="2000" value={loc.fee} onChange={(e) => updateLocation(index, 'fee', e.target.value)} required />
+                    </div>
                     <div style={{flex: 1}}>
                       <div style={{display:"flex", alignItems:"center", gap:"5px", marginBottom:"5px", fontSize:"12px", color:"#666"}}><FaClock/> Timings</div>
                       <input style={styles.input} placeholder="09:00 AM - 05:00 PM" value={loc.time} onChange={(e) => updateLocation(index, 'time', e.target.value)} required />

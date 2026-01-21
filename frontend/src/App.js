@@ -18,7 +18,8 @@ import MyAppointments from "./pages/patient/MyAppointments";
 import Diagnosis from "./pages/patient/Diagnosis";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import HealthRecords from "./pages/patient/HealthRecords";
-
+import UnregisteredDoctors from "./pages/patient/UnregisteredDoctors";
+import AllConditions from "./pages/patient/AllConditions";
 // Protected route
 function ProtectedRoute({ children, role }) {
   const { user } = useAuth();
@@ -80,6 +81,12 @@ function App() {
   </ProtectedRoute>
 } />
 
+<Route path="/unregistered-doctors" element={
+  <ProtectedRoute role="patient">
+    <UnregisteredDoctors />
+  </ProtectedRoute>
+} />
+
 {/* <Route
   path="/doctor-search"
   element={
@@ -91,6 +98,7 @@ function App() {
 
 <Route path="/doctor/:id" element={<DoctorProfile />} />
 <Route path="/my-appointments" element={<MyAppointments />} />
+<Route path="/all-conditions" element={<AllConditions />} />
 
           <Route
             path="/doctor-dashboard"

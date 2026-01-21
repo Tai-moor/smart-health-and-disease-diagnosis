@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-// 1. Added FaTimes for the close button
-import { FaSearch, FaStethoscope, FaHeart, FaTooth, FaBaby, FaBrain, FaFemale, FaBone, FaEye, FaTimes } from "react-icons/fa";
-import { GiStomach, GiKidneys, GiLungs } from "react-icons/gi";
-import { MdPregnantWoman } from "react-icons/md";
-import { auth } from "../../services/firebase";
-import { db } from "../../services/firebase";
+import { FaSearch, FaStethoscope, FaHeart, FaTooth, FaBaby, FaBrain, FaFemale, FaBone, FaEye, FaTimes, FaUserMd } from "react-icons/fa";
+import { GiStomach, GiKidneys, GiLungs, GiLeg } from "react-icons/gi";
+import { MdPregnantWoman, MdOutlineSick } from "react-icons/md";
+import { auth, db } from "../../services/firebase";
 import { doc, getDoc } from "firebase/firestore";
+
+// 🟢 FIXED IMPORT PATH (Go up 2 levels to find components)
+import HeroSearch from "../../components/HeroSearch";
 
 // 🎨 Styles
 const styles = {
+  // Main container for the content BELOW the hero banner
   container: {
     padding: "40px 20px",
     maxWidth: "1200px",
@@ -22,6 +24,16 @@ const styles = {
     fontSize: "2.5rem",
     marginBottom: "30px",
     fontWeight: "700",
+  },
+  subHeading: {
+    textAlign: "center",
+    color: "#444",
+    fontSize: "1.8rem",
+    marginTop: "50px",
+    marginBottom: "30px",
+    fontWeight: "600",
+    borderTop: "1px solid #eee",
+    paddingTop: "40px"
   },
   searchContainer: {
     display: "flex",
@@ -98,15 +110,13 @@ const styles = {
     fontSize: "15px",
     color: "#333",
   },
-  
-  // 🟢 2. NEW MODAL STYLES ADDED HERE
   modalOverlay: {
     position: "fixed",
     top: 0,
     left: 0,
     width: "100%",
     height: "100%",
-    backgroundColor: "rgba(0,0,0,0.6)", // Dark transparent background
+    backgroundColor: "rgba(0,0,0,0.6)",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
@@ -166,6 +176,17 @@ const popularCategories = [
   { name: "Pulmonologist", icon: <GiLungs /> },
 ];
 
+const topConditions = [
+  { name: "Fever/Cold", specialty: "General Physician", icon: <MdOutlineSick /> },
+  { name: "Heart Pain", specialty: "Cardiologist", icon: <FaHeart /> },
+  { name: "Toothache", specialty: "Dentist", icon: <FaTooth /> },
+  { name: "Depression", specialty: "Psychologist", icon: <FaBrain /> },
+  { name: "Stomach Pain", specialty: "General Physician", icon: <GiStomach /> },
+  { name: "Eye Issue", specialty: "Eye Specialist", icon: <FaEye /> },
+  { name: "Joint Pain", specialty: "Rheumatologist", icon: <GiLeg /> },
+  { name: "Migraine", specialty: "Neurologist", icon: <FaUserMd /> },
+];
+
 const allSpecialties = [
   "Gynecologist", "Pediatrician", "General Physician", "Psychiatrist", "Gastroenterologist",
   "Diabetologist", "Counselor", "Hematologist", "Obstetrician", "Neonatologist", "Hypertension Specialist",
@@ -202,9 +223,8 @@ function DoctorSearch() {
   const [searchTerm, setSearchTerm] = useState("");
   const [showDropdown, setShowDropdown] = useState(false);
   const [hoverIndex, setHoverIndex] = useState(null);
+  const [conditionHoverIndex, setConditionHoverIndex] = useState(null);
   const [name, setName] = useState("");
-  
-  // 🟢 3. Added State for Modal
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
@@ -213,19 +233,14 @@ function DoctorSearch() {
         setName("");
         return;
       }
-
-      // 1) Prefer Firebase Auth displayName
       if (user.displayName) {
         setName(user.displayName);
         return;
       }
-
-      // 2) Fallback: Firestore users/{uid}.name (covers older accounts)
       try {
         const ref = doc(db, "users", user.uid);
         const snap = await getDoc(ref);
         const n = snap.exists() ? snap.data()?.name : "";
-        // last fallback: derive from email prefix
         const fallback = user.email ? user.email.split("@")[0] : "";
         setName(n || fallback);
       } catch (e) {
@@ -245,112 +260,152 @@ function DoctorSearch() {
   };
 
   return (
-    <div style={styles.container}>
-      
-      <h2 style={styles.heading}>
-        {name ? `Hey ${name}, Find Best Doctor` : "Find Best Doctors"}
-      </h2>
+    // 🟢 Clean Wrapper Div
+    <div>
+      <HeroSearch />
+      <div style={styles.container}>
+        
+        <h2 style={styles.heading}>
+          {name ? `Hey ${name}, Find Best Doctor` : "Find Best Doctors"}
+        </h2>
 
-      {/* --- Search Bar --- */}
-      <div style={styles.searchContainer}>
-        <div style={{ position: 'relative', width: '100%', maxWidth: '600px' }}>
-          <FaSearch style={{ position: 'absolute', top: '18px', left: '20px', color: '#888' }} />
+        {/* --- Search Bar --- */}
+        <div style={styles.searchContainer}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '600px' }}>
+            <FaSearch style={{ position: 'absolute', top: '18px', left: '20px', color: '#888' }} />
+            
+            <input 
+              type="text" 
+              placeholder="Search doctors, clinics, hospitals, etc." 
+              style={styles.searchInput}
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setShowDropdown(true);
+              }}
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 200)} 
+            />
+
+            {showDropdown && searchTerm && (
+              <div style={styles.dropdown}>
+                {filteredSpecialties.length > 0 ? (
+                  filteredSpecialties.map((spec, index) => (
+                    <div 
+                      key={index} 
+                      style={styles.dropdownItem}
+                      onMouseDown={() => handleSelectSpecialty(spec)} 
+                      onMouseOver={(e) => e.target.style.backgroundColor = "#f9f9f9"}
+                      onMouseOut={(e) => e.target.style.backgroundColor = "white"}
+                    >
+                      {spec}
+                    </div>
+                  ))
+                ) : (
+                  <div style={{ padding: "15px", color: "#888" }}>No specialties found</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* --- Popular Categories Grid --- */}
+        <div style={styles.grid}>
+          {popularCategories.map((cat, index) => (
+            <div 
+              key={index} 
+              style={{
+                ...styles.card,
+                ...(hoverIndex === index ? styles.cardHover : {})
+              }}
+              onMouseEnter={() => setHoverIndex(index)}
+              onMouseLeave={() => setHoverIndex(null)}
+              onClick={() => handleSelectSpecialty(cat.name)}
+            >
+              <div style={styles.iconWrapper}>
+                {cat.icon}
+              </div>
+              <span style={styles.categoryTitle}>{cat.name}</span>
+            </div>
+          ))}
           
-          <input 
-            type="text" 
-            placeholder="Search doctors, clinics, hospitals, etc." 
-            style={styles.searchInput}
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setShowDropdown(true);
-            }}
-            onFocus={() => setShowDropdown(true)}
-            onBlur={() => setTimeout(() => setShowDropdown(false), 200)} 
-          />
+          {/* View All Button */}
+          <div 
+            style={{ ...styles.card, cursor: "pointer" }}
+            onClick={() => setShowModal(true)}
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = "#007bff"}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = "#eee"}
+          >
+             <div style={{...styles.iconWrapper, backgroundColor: "#eee", color: "#333"}}>
+                <FaSearch />
+              </div>
+              <span style={styles.categoryTitle}>View All</span>
+          </div>
+        </div>
 
-          {showDropdown && searchTerm && (
-            <div style={styles.dropdown}>
-              {filteredSpecialties.length > 0 ? (
-                filteredSpecialties.map((spec, index) => (
+        {/* 🟢 Search by Health Condition */}
+        <h3 style={styles.subHeading}>Search doctor by condition</h3>
+        
+        <div style={styles.grid}>
+          {topConditions.map((item, index) => (
+            <div 
+              key={index} 
+              style={{
+                ...styles.card,
+                ...(conditionHoverIndex === index ? styles.cardHover : {})
+              }}
+              onMouseEnter={() => setConditionHoverIndex(index)}
+              onMouseLeave={() => setConditionHoverIndex(null)}
+              onClick={() => handleSelectSpecialty(item.specialty)}
+            >
+              <div style={{...styles.iconWrapper, backgroundColor: "#fff0f0", color: "#ff6b6b"}}>
+                {item.icon}
+              </div>
+              <span style={styles.categoryTitle}>{item.name}</span>
+            </div>
+          ))}
+
+          {/* View All Conditions Button */}
+          <div 
+            style={{ ...styles.card, cursor: "pointer" }}
+            onClick={() => navigate("/all-conditions")} 
+            onMouseEnter={(e) => e.currentTarget.style.borderColor = "#ff6b6b"}
+            onMouseLeave={(e) => e.currentTarget.style.borderColor = "#eee"}
+          >
+             <div style={{...styles.iconWrapper, backgroundColor: "#eee", color: "#333"}}>
+                <FaSearch />
+              </div>
+              <span style={styles.categoryTitle}>All Conditions</span>
+          </div>
+        </div>
+
+        {/* --- Modal Popup --- */}
+        {showModal && (
+          <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
+            <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
+              <button style={styles.closeBtn} onClick={() => setShowModal(false)}>
+                <FaTimes />
+              </button>
+              <h3 style={{ textAlign: "center", marginBottom: "20px" }}>All Specialties</h3>
+              
+              <div style={styles.modalGrid}>
+                {allSpecialties.sort().map((spec) => (
                   <div 
-                    key={index} 
-                    style={styles.dropdownItem}
-                    onMouseDown={() => handleSelectSpecialty(spec)} 
-                    onMouseOver={(e) => e.target.style.backgroundColor = "#f9f9f9"}
-                    onMouseOut={(e) => e.target.style.backgroundColor = "white"}
+                    key={spec} 
+                    style={styles.modalItem}
+                    onClick={() => handleSelectSpecialty(spec)}
+                    onMouseOver={(e) => e.currentTarget.style.borderColor = "#007bff"}
+                    onMouseOut={(e) => e.currentTarget.style.borderColor = "#eee"}
                   >
                     {spec}
                   </div>
-                ))
-              ) : (
-                <div style={{ padding: "15px", color: "#888" }}>No specialties found</div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* --- Popular Categories Grid --- */}
-      <div style={styles.grid}>
-        {popularCategories.map((cat, index) => (
-          <div 
-            key={index} 
-            style={{
-              ...styles.card,
-              ...(hoverIndex === index ? styles.cardHover : {})
-            }}
-            onMouseEnter={() => setHoverIndex(index)}
-            onMouseLeave={() => setHoverIndex(null)}
-            onClick={() => handleSelectSpecialty(cat.name)}
-          >
-            <div style={styles.iconWrapper}>
-              {cat.icon}
-            </div>
-            <span style={styles.categoryTitle}>{cat.name}</span>
-          </div>
-        ))}
-        
-        {/* 🟢 4. FIXED: "View All" Button now opens the modal */}
-        <div 
-          style={{ ...styles.card, cursor: "pointer" }}
-          onClick={() => setShowModal(true)} // Changed from alert() to state update
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = "#007bff"}
-          onMouseLeave={(e) => e.currentTarget.style.borderColor = "#eee"}
-        >
-           <div style={{...styles.iconWrapper, backgroundColor: "#eee", color: "#333"}}>
-              <FaSearch />
-            </div>
-            <span style={styles.categoryTitle}>View All</span>
-        </div>
-      </div>
-
-      {/* 🟢 5. NEW: The Modal Popup Code */}
-      {showModal && (
-        <div style={styles.modalOverlay} onClick={() => setShowModal(false)}>
-          <div style={styles.modalContent} onClick={(e) => e.stopPropagation()}>
-            <button style={styles.closeBtn} onClick={() => setShowModal(false)}>
-              <FaTimes />
-            </button>
-            <h3 style={{ textAlign: "center", marginBottom: "20px" }}>All Specialties</h3>
-            
-            <div style={styles.modalGrid}>
-              {allSpecialties.sort().map((spec) => (
-                <div 
-                  key={spec} 
-                  style={styles.modalItem}
-                  onClick={() => handleSelectSpecialty(spec)}
-                  onMouseOver={(e) => e.currentTarget.style.borderColor = "#007bff"}
-                  onMouseOut={(e) => e.currentTarget.style.borderColor = "#eee"}
-                >
-                  {spec}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
+      </div>
     </div>
   );
 }
