@@ -47,6 +47,12 @@ SAFETY_SETTINGS = {
 }
 
 chat_history = [] 
+conversation_state = {
+    "questions_asked": 0,
+    "symptom_topic": None,
+    "enough_info": False,
+    "user_city": None
+}
 
 # =============================
 # Specialty inference (deterministic, symptom-first)
@@ -61,35 +67,41 @@ SPECIALTY_KEYWORDS = {
         "breathing", "breath", "wheezing", "asthma", "cough", "lungs", "copd", "pneumonia"
     ],
     "Neurologist": [
-        "headache", "migraine", "seizure", "stroke", "numb", "tingling", "dizziness"
+        "headache", "migraine", "seizure", "stroke", "numb", "tingling", "dizziness", "vertigo"
     ],
     "Dentist": [
-        "tooth", "teeth", "toothache", "gum", "cavity", "jaw pain"
+        "tooth", "teeth", "toothache", "gum", "cavity", "jaw pain", "dental"
     ],
     "Dermatologist": [
-        "skin", "rash", "acne", "eczema", "itch", "hives"
+        "skin", "rash", "acne", "eczema", "itch", "hives", "mole"
     ],
     "ENT Specialist": [
-        "ear", "throat", "tonsil", "sinus", "nose", "hearing", "ear pain"
+        "ear", "throat", "tonsil", "sinus", "nose", "hearing", "ear pain", "sore throat"
     ],
     "Orthopedic Surgeon": [
-        "knee", "joint", "bone", "fracture", "back pain", "shoulder", "sprain"
+        "knee", "joint", "bone", "fracture", "back pain", "shoulder", "sprain", "neck pain", "ankle"
     ],
     "Gynecologist": [
-        "pregnancy", "period", "menstrual", "vaginal", "pelvic pain"
+        "pregnancy", "period", "menstrual", "vaginal", "pelvic pain", "pregnant"
     ],
     "Pediatrician": [
-        "baby", "infant", "child", "kid", "vaccination"
+        "baby", "infant", "child", "kid", "vaccination", "toddler"
     ],
     "Urologist": [
         "urine", "urinary", "kidney", "bladder", "prostate"
     ],
     "Endocrinologist": [
-        "diabetes", "thyroid", "hormone"
+        "diabetes", "thyroid", "hormone", "blood sugar"
     ],
     "Psychiatrist": [
-        "anxiety", "depression", "panic", "stress", "insomnia"
+        "anxiety", "depression", "panic", "stress", "insomnia", "mental health"
     ],
+    "Gastroenterologist": [
+        "stomach", "abdomen", "abdominal pain", "digestive", "nausea", "vomiting", "diarrhea"
+    ],
+    "Rheumatologist": [
+        "arthritis", "joint pain", "autoimmune", "lupus"
+    ]
 }
 
 def infer_specialty_from_text(text: str) -> str | None:
@@ -103,6 +115,17 @@ def infer_specialty_from_text(text: str) -> str | None:
                 return specialty
     return None
 
+def extract_city_from_text(text: str) -> str | None:
+    """Extract city name from user message"""
+    common_cities = [
+        "islamabad", "rawalpindi", "lahore", "karachi", "peshawar", 
+        "quetta", "multan", "faisalabad", "sialkot", "gujranwala"
+    ]
+    t = text.lower()
+    for city in common_cities:
+        if city in t:
+            return city.title()
+    return None
 
 def _read_doctors_csv() -> list[dict]:
     with open(DOCTORS_CSV, mode="r", encoding="utf-8") as f:
@@ -116,7 +139,6 @@ def _read_doctors_csv() -> list[dict]:
                 r["priority"] = 0
             rows.append(r)
         return rows
-
 
 def find_doctors_from_csv(specialty: str | None = None, city: str | None = None, limit: int = 20) -> list[dict]:
     specialty_in = (specialty or "").strip().lower()
@@ -164,7 +186,7 @@ except Exception as e:
 
 @tool
 def doctor_lookup(user_specialty: str, city: str) -> dict:
-    """Find a doctor by specialty and city from the database. Handles spelling errors."""
+    """Find a doctor by specialty and city. Only use after asking 2-3 clarifying questions."""
     if not user_specialty or not city:
         return {"error": "Please provide both specialty and city."}
 
@@ -196,10 +218,10 @@ def doctor_lookup(user_specialty: str, city: str) -> dict:
         if not results:
             return {"error": f"No {user_specialty} found in {city_in.title()}."}
 
-        rec_text = f"Found matches in {city_in.title()}:\n"
+        rec_text = f"**Recommended {user_specialty}s in {city_in.title()}:**\n\n"
         for r in results[:3]:
             phone = r.get('phone', 'N/A')
-            rec_text += f"- {r['name']} ({r['address']}) - 📞 {phone}\n"
+            rec_text += f"👨‍⚕️ **{r['name']}**\n📍 {r['address']}\n📞 {phone}\n\n"
         
         # Return clean specialty for button logic
         found_specialty = results[0]['specialty'] if results else user_specialty
@@ -213,8 +235,8 @@ def disease_info(query: str) -> str:
     """Find disease info from the encyclopedia."""
     if not retriever: return "Knowledge base not loaded."
     docs = retriever.invoke(query)
-    if not docs: return "I checked the encyclopedia but found no information."
-    return f"**From Encyclopedia:**\n{docs[0].page_content}"
+    if not docs: return "No information found in encyclopedia."
+    return f"ℹ️ **Medical Info:** {docs[0].page_content[:400]}..."
 
 @tool
 def list_diseases() -> str:
@@ -228,14 +250,42 @@ llm = ChatGoogleGenerativeAI(model=AGENT_MODEL, google_api_key=GOOGLE_API_KEY, s
 tools = [doctor_lookup, disease_info, list_diseases]
 
 system_prompt = """
-You are Medibot, an empathetic AI medical assistant. 
+You are Medibot, a concise and empathetic AI medical assistant. 
 
-**Rules:**
-1. If the user asks about a disease, use `disease_info`.
-2. If the user asks for a doctor, use `doctor_lookup`. 
-   - Fix severe typos (e.g. "insmlbd" -> "Islamabad") before calling the tool.
-   - Always display the Name, Address, and Phone Number from the tool.
-3. If the user describes symptoms, ask clarification questions first.
+**CRITICAL RULES:**
+
+1. **Keep responses SHORT** (2-4 sentences max)
+2. **NEVER suggest doctors immediately** - Always ask 2-3 questions first
+3. **Ask ONE question at a time** - Don't overwhelm users
+4. **Question sequence:**
+   - First: Duration ("How long have you had this?")
+   - Second: Severity or other symptoms ("How severe is it? Any other symptoms?")
+   - Third: If needed, ask about triggers or medical history
+
+5. **After 2-3 questions:**
+   - Give brief advice (1-2 sentences)
+   - Suggest the specialist type
+   - Ask for their city if not provided
+
+6. **For doctor lookup:**
+   - Only use `doctor_lookup` after asking questions AND getting city
+   - Always show Name, Address, Phone clearly
+
+**Example Flow:**
+User: "I have back pain"
+You: "I'm sorry to hear that. How long have you been experiencing this back pain?"
+
+User: "3 days"
+You: "Is the pain constant or does it come and go? Do you have any numbness?"
+
+User: "Constant, no numbness"
+You: "This could be a muscle strain. I recommend seeing an Orthopedic Surgeon. Which city are you in?"
+
+**Remember:**
+- Be empathetic but brief
+- One question at a time
+- No long explanations
+- Get to the point quickly
 """
 
 agent_prompt = ChatPromptTemplate.from_messages([
@@ -257,9 +307,29 @@ class UserQuery(BaseModel):
 @app.post("/chat")
 async def chat_endpoint(query: UserQuery):
     try:
-        global chat_history
+        global chat_history, conversation_state
+        
         if len(chat_history) > 10:
             chat_history = chat_history[-10:]
+
+        user_msg_lower = query.message.lower()
+        
+        # Detect city in user message
+        detected_city = extract_city_from_text(query.message)
+        if detected_city:
+            conversation_state["user_city"] = detected_city
+        
+        # Check if this is a new symptom topic
+        has_symptom = any(kw in user_msg_lower for specialty_kws in SPECIALTY_KEYWORDS.values() for kw in specialty_kws)
+        
+        # Detect specialty from user message
+        detected_specialty = infer_specialty_from_text(query.message)
+        
+        # Reset on new topic or greeting
+        if has_symptom and conversation_state["questions_asked"] == 0:
+            conversation_state["symptom_topic"] = detected_specialty
+        elif any(word in user_msg_lower for word in ["hello", "hi", "hey", "start"]):
+            conversation_state = {"questions_asked": 0, "symptom_topic": None, "enough_info": False, "user_city": None}
 
         response = agent_executor.invoke({
             "input": query.message,
@@ -271,16 +341,46 @@ async def chat_endpoint(query: UserQuery):
         chat_history.append(HumanMessage(content=query.message))
         chat_history.append(AIMessage(content=output_text))
 
-        # IMPORTANT: infer specialty from the *user message* (deterministic),
-        # not from whatever the LLM happened to mention in its response.
-        specialty = infer_specialty_from_text(query.message)
+        # Count questions asked by bot
+        if "?" in output_text:
+            # Don't count city questions
+            if not any(phrase in output_text.lower() for phrase in ["which city", "what city", "where are you", "your city", "your location"]):
+                conversation_state["questions_asked"] += 1
+        
+        # Check if doctor lookup was called
+        if "recommended" in output_text.lower() or "📞" in output_text:
+            conversation_state["enough_info"] = True
 
-        return {"text": output_text, "specialty": specialty}
+        # Determine specialty to show button
+        specialty_for_button = None
+        
+        # Show specialty button if:
+        # 1. Detected from user message (immediate)
+        # 2. OR from conversation state
+        # 3. OR after enough questions asked
+        if detected_specialty:
+            specialty_for_button = detected_specialty
+        elif conversation_state["symptom_topic"]:
+            specialty_for_button = conversation_state["symptom_topic"]
+        
+        # Determine if ready to show doctors
+        ready_for_doctors = (
+            conversation_state["questions_asked"] >= 2 or 
+            conversation_state["enough_info"] or
+            ("recommend" in user_msg_lower and "doctor" in user_msg_lower)
+        )
+
+        return {
+            "text": output_text, 
+            "specialty": specialty_for_button,  # Always return specialty for button
+            "questions_asked": conversation_state["questions_asked"],
+            "ready_for_doctors": ready_for_doctors,  # Signal when to enable "See Doctors" button
+            "city": conversation_state.get("user_city")
+        }
 
     except Exception as e:
         print(f"Error: {e}")
         return {"text": "Error processing your request.", "specialty": None}
-
 
 @app.get("/doctors")
 def doctors_endpoint(
@@ -288,6 +388,14 @@ def doctors_endpoint(
     city: str | None = Query(default=None),
     limit: int = Query(default=20, ge=1, le=100),
 ):
-    """Return doctors from FYP/data/doctors.csv (independent of Firebase registrations)."""
+    """Return doctors from data/doctors.csv"""
     docs = find_doctors_from_csv(specialty=specialty, city=city, limit=limit)
     return {"doctors": docs, "count": len(docs), "specialty": specialty, "city": city}
+
+@app.post("/reset")
+async def reset_conversation():
+    """Reset the conversation state"""
+    global chat_history, conversation_state
+    chat_history = []
+    conversation_state = {"questions_asked": 0, "symptom_topic": None, "enough_info": False, "user_city": None}
+    return {"status": "Conversation reset successfully"}
