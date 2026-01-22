@@ -1,26 +1,29 @@
-// src/pages/patient/DoctorList.js
 import React, { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { db } from "../../services/firebase";
-import { collection, query, where, getDocs } from "firebase/firestore";
+import { collection, getDocs } from "firebase/firestore";
+import { FaMapMarkerAlt, FaStar, FaUserMd, FaPhone, FaExclamationCircle, FaHospital } from "react-icons/fa";
 
 // 🎨 Styles
 const styles = {
-  container: { padding: "40px 20px", maxWidth: "1000px", margin: "0 auto", fontFamily: "sans-serif" },
-  heading: { marginBottom: "30px", color: "#333", borderBottom: "2px solid #007bff", display: "inline-block", paddingBottom: "10px" },
+  container: { padding: "40px 20px", maxWidth: "1000px", margin: "0 auto", fontFamily: "'Segoe UI', sans-serif" },
+  
+  // Section Headers
+  sectionHeader: {
+    display: "flex", alignItems: "center", gap: "10px", marginTop: "40px", marginBottom: "20px",
+    paddingBottom: "10px", borderBottom: "2px solid #eee"
+  },
+  sectionTitle: { fontSize: "22px", fontWeight: "bold", color: "#2c3e50", margin: 0 },
+  badge: { padding: "5px 12px", borderRadius: "20px", fontSize: "12px", fontWeight: "bold", color: "white" },
+
+  // Cards
   grid: { display: "flex", flexDirection: "column", gap: "20px" },
   
-  // Doctor Card
+  // Registered Card
   card: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "25px",
-    border: "1px solid #eee",
-    borderRadius: "12px",
-    backgroundColor: "white",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.05)",
-    transition: "transform 0.2s",
+    display: "flex", justifyContent: "space-between", alignItems: "center", padding: "25px",
+    border: "1px solid #eee", borderRadius: "12px", backgroundColor: "white",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.05)", transition: "transform 0.2s",
   },
   infoSection: { display: "flex", gap: "20px", alignItems: "center" },
   avatar: {
@@ -34,158 +37,226 @@ const styles = {
   hospital: { margin: 0, color: "#666", fontSize: "0.9rem" },
   stats: { margin: 0, color: "#888", fontSize: "0.85rem", marginTop: "5px" },
   
-  // Action Section
-  actionSection: { textAlign: "right" },
+  actionSection: { textAlign: "right", minWidth: "120px" },
   price: { fontSize: "1.1rem", fontWeight: "bold", color: "#28a745", marginBottom: "10px", display: "block" },
   bookBtn: {
-    padding: "12px 25px",
-    backgroundColor: "#007bff",
-    color: "white",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-    fontWeight: "bold",
-    fontSize: "14px",
+    padding: "12px 25px", backgroundColor: "#007bff", color: "white", border: "none",
+    borderRadius: "8px", cursor: "pointer", fontWeight: "bold", fontSize: "14px",
     transition: "background 0.2s",
   },
-  noResult: { textAlign: "center", marginTop: "50px", color: "#777", fontSize: "1.2rem" }
+
+  // Unregistered Card
+  unregCard: {
+    padding: "20px", backgroundColor: "#fffbf2", border: "1px solid #ffeeba",
+    borderRadius: "12px", boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+    display: "flex", justifyContent: "space-between", alignItems: "center"
+  },
+  callBtn: {
+    padding: "10px 20px", backgroundColor: "#28a745", color: "white", border: "none",
+    borderRadius: "8px", fontWeight: "bold", cursor: "pointer", display: "flex", alignItems: "center", gap: "8px"
+  },
+
+  noResult: { textAlign: "center", padding: "50px", color: "#777", backgroundColor: "#f9f9f9", borderRadius: "10px" }
 };
 
 function DoctorList() {
   const [searchParams] = useSearchParams();
-  const specialty = searchParams.get("specialty"); // Gets "Dentist" from URL
   const navigate = useNavigate();
 
-  const [doctors, setDoctors] = useState([]);
-  const [csvDoctors, setCsvDoctors] = useState([]);
+  // 1. Get Params from URL
+  const specialtyParam = searchParams.get("specialty") || ""; 
+  const cityParam = searchParams.get("city") || "";
+
+  const [regDoctors, setRegDoctors] = useState([]);
+  const [unregDoctors, setUnregDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchDoctors = async () => {
+    const fetchData = async () => {
       setLoading(true);
       try {
-        const doctorsRef = collection(db, "doctors");
-        
-        let q;
-        // 🔍 Query Logic: If URL has specialty, filter by it. Else, show all.
-        if (specialty) {
-           // "array-contains" is used because specialties is a list like ['Dentist', 'Surgeon']
-           q = query(doctorsRef, where("specialties", "array-contains", specialty));
-        } else {
-           q = query(doctorsRef); 
-        }
+        // ============================================
+        // 1. FETCH REGISTERED DOCTORS (Firebase)
+        // ============================================
+        const querySnapshot = await getDocs(collection(db, "doctors"));
+        const allFirebaseDocs = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
 
-        const querySnapshot = await getDocs(q);
-        const doctorsData = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        // STRICT FILTERING
+        const filteredReg = allFirebaseDocs.filter(doc => {
+            // Specialty Check
+            const specMatch = specialtyParam 
+                ? (doc.specialties && doc.specialties.some(s => s.toLowerCase().includes(specialtyParam.toLowerCase())))
+                : true;
 
-        setDoctors(doctorsData);
+            // City Check (Strict: Must match City field or Practice Location)
+            const cityMatch = cityParam
+                ? (doc.city?.toLowerCase().includes(cityParam.toLowerCase()) || 
+                   doc.practiceLocations?.some(loc => loc.city?.toLowerCase().includes(cityParam.toLowerCase())))
+                : true;
+
+            return specMatch && cityMatch;
+        });
+        setRegDoctors(filteredReg);
+
+        // ============================================
+        // 2. FETCH UNREGISTERED DOCTORS (Text File)
+        // ============================================
+        const response = await fetch("/unregistered_doctors.txt");
+        const text = await response.text();
+        const allTextDocs = text.trim().split("\n").map((line, index) => {
+            const [name, specialty, loc, phone, experience] = line.split("|");
+            return {
+              id: `unreg_${index}`,
+              name: name?.trim(),
+              specialty: specialty?.trim(),
+              location: loc?.trim(), // Contains City info
+              phone: phone?.trim(),
+              experience: experience?.trim()
+            };
+        }).filter(d => d.name);
+
+        // STRICT FILTERING
+        const filteredUnreg = allTextDocs.filter(doc => {
+            const specMatch = specialtyParam 
+                ? doc.specialty?.toLowerCase().includes(specialtyParam.toLowerCase()) 
+                : true;
+            
+            const cityMatch = cityParam
+                ? doc.location?.toLowerCase().includes(cityParam.toLowerCase()) 
+                : true;
+
+            return specMatch && cityMatch;
+        });
+        setUnregDoctors(filteredUnreg);
+
       } catch (error) {
-        console.error("Error fetching doctors:", error);
+        console.error("Error loading data:", error);
       }
-
-      // Always try CSV fallback (so suggestions work even if nobody registered in Firebase)
-      try {
-        const API_BASE =
-          process.env.REACT_APP_API_URL || "http://localhost:8000";
-        const qs = specialty ? `?specialty=${encodeURIComponent(specialty)}` : "";
-        const res = await fetch(`${API_BASE}/doctors${qs}`);
-        const data = await res.json();
-        setCsvDoctors(Array.isArray(data.doctors) ? data.doctors : []);
-      } catch (e) {
-        console.error("Error fetching CSV doctors:", e);
-        setCsvDoctors([]);
-      }
-
       setLoading(false);
     };
 
-    fetchDoctors();
-  }, [specialty]);
+    fetchData();
+  }, [specialtyParam, cityParam]); // Re-run when URL changes
+
+  const handleCall = (phone) => {
+    window.location.href = `tel:${phone}`;
+  };
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>
-        {specialty ? `Best ${specialty}s Near You` : "All Available Doctors"}
+      <h2>
+        {specialtyParam ? `${specialtyParam}s` : "Doctors"} 
+        {cityParam && <span style={{color: "#007bff"}}> in {cityParam}</span>}
       </h2>
 
       {loading ? (
-        <p>Loading...</p>
-      ) : doctors.length === 0 && csvDoctors.length === 0 ? (
+        <p>Searching...</p>
+      ) : regDoctors.length === 0 && unregDoctors.length === 0 ? (
+        
+        /* 🟢 EMPTY STATE */
         <div style={styles.noResult}>
-          <p>No doctors found for <b>{specialty}</b> yet.</p>
+          <FaExclamationCircle size={40} color="#ccc"/>
+          <h3>No doctors found.</h3>
+          <p>We couldn't find any <b>{specialtyParam}</b> in <b>{cityParam}</b>.</p>
           <button 
             onClick={() => navigate('/home')}
             style={{...styles.bookBtn, backgroundColor: "#6c757d", marginTop: "10px"}}
           >
-            Go Back
+            Go Back & Search Again
           </button>
         </div>
+
       ) : (
-        <div style={styles.grid}>
-          {/* If registered doctors exist in Firebase, show them first */}
-          {doctors.map((doc) => (
-            <div key={doc.id} style={styles.card}>
-              
-              {/* Left Side: Image & Info */}
-              <div style={styles.infoSection}>
-                {/* Avatar: Shows first letter of name */}
-                <div style={styles.avatar}>
-                  {doc.name.charAt(0).toUpperCase()}
+        <>
+          {/* ==================================== */}
+          {/* SECTION 1: VERIFIED REGISTERED DOCTORS */}
+          {/* ==================================== */}
+          {regDoctors.length > 0 && (
+            <>
+                <div style={styles.sectionHeader}>
+                    <div style={{...styles.badge, backgroundColor:"#28a745"}}>Verified</div>
+                    <h3 style={styles.sectionTitle}>Book Appointment Online</h3>
                 </div>
-                
-                <div style={styles.details}>
-                  <h3 style={styles.name}>{doc.name}</h3>
-                  <p style={styles.specialty}>{doc.specialties.join(", ")}</p>
-                  <p style={styles.hospital}>🏥 {doc.hospital}</p>
-                  <p style={styles.stats}>
-                    {doc.experience} Years Exp • {doc.gender || "Doctor"}
-                  </p>
-                </div>
-              </div>
 
-              {/* Right Side: Price & Button */}
-              <div style={styles.actionSection}>
-                <span style={styles.price}>Rs {doc.fee}</span>
-                <button 
-                  style={styles.bookBtn}
-                  onClick={() => navigate(`/doctor/${doc.id}`)} // We will build this next
-                >
-                  Book Appointment
-                </button>
-              </div>
+                <div style={styles.grid}>
+                    {regDoctors.map((doc) => (
+                    <div key={doc.id} style={styles.card}>
+                        <div style={styles.infoSection}>
+                            <div style={styles.avatar}><FaUserMd/></div>
+                            <div style={styles.details}>
+                                <h3 style={styles.name}>{doc.name}</h3>
+                                
+                                {/* 🟢 NEW: RATING DISPLAY ADDED HERE */}
+                                <div style={{display:"flex", alignItems:"center", gap:"5px", margin:"0"}}>
+                                    <FaStar color="#ffc107" size={14} />
+                                    <span style={{fontWeight:"bold", color:"#333", fontSize:"14px"}}>
+                                        {doc.averageRating ? doc.averageRating : "New"}
+                                    </span>
+                                    <span style={{color:"#888", fontSize:"12px"}}>
+                                        ({doc.totalReviews || 0} reviews)
+                                    </span>
+                                </div>
 
-            </div>
-          ))}
+                                <p style={styles.specialty}>{doc.specialties ? doc.specialties.join(", ") : "Specialist"}</p>
+                                <p style={styles.hospital}>
+                                    <FaHospital style={{marginRight:"5px"}}/>
+                                    {doc.hospital || (doc.practiceLocations && doc.practiceLocations[0]?.hospital) || "Clinic"}
+                                    {doc.city ? ` (${doc.city})` : ""}
+                                </p>
+                                <p style={styles.stats}>
+                                    <FaStar color="#ffc107"/> {doc.experience} Years Exp
+                                </p>
+                            </div>
+                        </div>
 
-          {/* CSV doctors fallback (no booking profile, but shows correct specialty suggestions) */}
-          {doctors.length === 0 && csvDoctors.map((doc, idx) => (
-            <div key={`${doc.name}-${idx}`} style={styles.card}>
-              <div style={styles.infoSection}>
-                <div style={styles.avatar}>
-                  {(doc.name || "D").charAt(0).toUpperCase()}
+                        <div style={styles.actionSection}>
+                            <span style={styles.price}>Rs {doc.fee || (doc.practiceLocations && doc.practiceLocations[0]?.fee) || 0}</span>
+                            <button 
+                                style={styles.bookBtn}
+                                onClick={() => navigate(`/doctor/${doc.id}`)}
+                            >
+                                Book
+                            </button>
+                        </div>
+                    </div>
+                    ))}
                 </div>
-                <div style={styles.details}>
-                  <h3 style={styles.name}>{doc.name}</h3>
-                  <p style={styles.specialty}>{doc.specialty}</p>
-                  <p style={styles.hospital}>📍 {doc.address} • {doc.city}</p>
-                  <p style={styles.stats}>📞 {doc.phone}</p>
+            </>
+          )}
+
+          {/* ==================================== */}
+          {/* SECTION 2: UNREGISTERED LOCAL DOCTORS */}
+          {/* ==================================== */}
+          {unregDoctors.length > 0 && (
+            <>
+                <div style={{...styles.sectionHeader, borderBottomColor:"#ffeeba", marginTop: "50px"}}>
+                    <div style={{...styles.badge, backgroundColor:"#e67e22"}}>Local Directory</div>
+                    <h3 style={styles.sectionTitle}>Other Local Doctors (Call Only)</h3>
                 </div>
-              </div>
-              <div style={styles.actionSection}>
-                <span style={{...styles.price, color: "#6c757d"}}>CSV Suggestion</span>
-                <button
-                  style={{...styles.bookBtn, backgroundColor: "#28a745"}}
-                  onClick={() => window.open(`tel:${doc.phone}`)}
-                >
-                  Call
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+
+                <div style={styles.grid}>
+                    {unregDoctors.map((doc, idx) => (
+                    <div key={idx} style={styles.unregCard}>
+                        <div>
+                            <h3 style={{fontSize:"18px", margin:"0 0 5px 0", color:"#333"}}>{doc.name}</h3>
+                            <p style={{color:"#e67e22", fontWeight:"bold", margin:"0 0 5px 0", fontSize:"14px"}}>{doc.specialty}</p>
+                            <p style={{color:"#666", fontSize:"14px", margin:0}}>
+                                <FaMapMarkerAlt/> {doc.location}
+                            </p>
+                        </div>
+                        
+                        <button 
+                            style={styles.callBtn}
+                            onClick={() => handleCall(doc.phone)}
+                        >
+                            <FaPhone/> Call {doc.phone}
+                        </button>
+                    </div>
+                    ))}
+                </div>
+            </>
+          )}
+        </>
       )}
     </div>
   );

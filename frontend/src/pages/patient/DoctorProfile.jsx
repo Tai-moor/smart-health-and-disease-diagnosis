@@ -100,7 +100,7 @@ function DoctorProfile() {
             setAvailableSlots(generateSlots(data.practiceLocations[0].time));
           } else {
             const legacyLoc = {
-              hospital: data.hospital, fee: data.fee, time: "09:00 AM - 05:00 PM"
+              hospital: data.hospital, fee: data.fee, time: "09:00 AM - 05:00 PM", city: data.city || ""
             };
             setSelectedLocation(legacyLoc);
             setAvailableSlots(generateSlots(legacyLoc.time));
@@ -161,7 +161,8 @@ function DoctorProfile() {
       await addDoc(collection(db, "appointments"), {
         doctorId: id,
         doctorName: doctor.name,
-        doctorHospital: selectedLocation.hospital, 
+        doctorHospital: selectedLocation.hospital,
+        doctorCity: selectedLocation.city || "", // Save city to appointment too
         patientId: auth.currentUser.uid,
         patientName, patientCNIC: cnic,
         date, time, reason, reportUrl, slotId,
@@ -216,17 +217,21 @@ function DoctorProfile() {
             {doctor.practiceLocations && doctor.practiceLocations.length > 0 ? (
               <select style={styles.input} value={selectedLocationIndex} onChange={handleLocationChange}>
                 {doctor.practiceLocations.map((loc, index) => (
-                  <option key={index} value={index}>{loc.hospital}</option>
+                  // 🟢 UPDATED: Shows "Hospital Name (City)" in dropdown
+                  <option key={index} value={index}>
+                    {loc.hospital} {loc.city ? `(${loc.city})` : ""}
+                  </option>
                 ))}
               </select>
             ) : (
-              <input style={styles.input} value={doctor.hospital} disabled />
+              <input style={styles.input} value={`${doctor.hospital} ${doctor.city ? `(${doctor.city})` : ""}`} disabled />
             )}
 
             {selectedLocation && (
               <div style={styles.infoBox}>
                 <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"5px"}}>
-                   <FaMapMarkerAlt/> <strong>{selectedLocation.hospital}</strong>
+                   {/* 🟢 UPDATED: Shows City in the details box too */}
+                   <FaMapMarkerAlt/> <strong>{selectedLocation.hospital} {selectedLocation.city ? `(${selectedLocation.city})` : ""}</strong>
                 </div>
                 <div style={{display:"flex", alignItems:"center", gap:"10px", marginBottom:"5px"}}>
                    <FaClock/> {selectedLocation.time || "09:00 AM - 05:00 PM"}
