@@ -128,6 +128,9 @@ function Navbar() {
             <Link to="/health-records" style={styles.link}>
   <FaFileAlt /> Health Records
 </Link>
+<Link to="/symptom" style={styles.link}>
+  <FaFileAlt /> Symptom Predictor
+</Link>
           </>
         )}
 

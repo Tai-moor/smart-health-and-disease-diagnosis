@@ -20,6 +20,7 @@ import AdminDashboard from "./pages/admin/AdminDashboard";
 import HealthRecords from "./pages/patient/HealthRecords";
 import UnregisteredDoctors from "./pages/patient/UnregisteredDoctors";
 import AllConditions from "./pages/patient/AllConditions";
+import SymptomPredictor from "./components/SymptomPredictor";
 // Protected route
 function ProtectedRoute({ children, role }) {
   const { user } = useAuth();
@@ -80,6 +81,13 @@ function App() {
     <Diagnosis />
   </ProtectedRoute>
 } />
+
+<Route path="/symptom" element={
+  <ProtectedRoute role="patient">
+    <SymptomPredictor/>
+  </ProtectedRoute>
+} />
+
 
 <Route path="/unregistered-doctors" element={
   <ProtectedRoute role="patient">
